@@ -381,6 +381,11 @@ axis2_http_transport_utils_process_http_post_request(
                 AXIS2_LOG_DEBUG(env->log, AXIS2_LOG_SI, "HTTP"
                                 " stream chunked");
             }
+            else if (encoding_value)
+            {
+                callback_ctx->content_length = -1;
+            }
+            
         }
     }
     else

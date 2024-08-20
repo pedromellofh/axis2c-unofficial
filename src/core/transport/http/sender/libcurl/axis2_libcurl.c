@@ -121,8 +121,12 @@ axis2_libcurl_send(
     axutil_property_t *property;
     int *response_length = NULL;
     axis2_char_t *tmp_strcat = NULL;
-    int status_code = 0;
+    long status_code = 0;
     double content_length_dbl = 0;
+    /* http header property to get HTTP headers from msg_ctx and give
+     * it to http_sender */
+    axutil_property_t *http_property = NULL;
+    axutil_array_list_t *array_list;
 
     AXIS2_PARAM_CHECK(env->error, data, AXIS2_FAILURE);
     AXIS2_PARAM_CHECK(env->error, data->handler, AXIS2_FAILURE);
@@ -130,9 +134,41 @@ axis2_libcurl_send(
     handler = data->handler;
     curl_easy_reset(handler);
     curl_easy_setopt(handler, CURLOPT_ERRORBUFFER, &data->errorbuffer);
+
+    /* User-Agent:Axis2/C header */
     headers = curl_slist_append(headers, AXIS2_HTTP_HEADER_USER_AGENT_AXIS2C);
-    headers = curl_slist_append(headers, AXIS2_HTTP_HEADER_ACCEPT_);
-    headers = curl_slist_append(headers, AXIS2_HTTP_HEADER_EXPECT_);
+    /* headers = curl_slist_append(headers, AXIS2_HTTP_HEADER_ACCEPT_); */
+    /* headers = curl_slist_append(headers, AXIS2_HTTP_HEADER_EXPECT_); */
+    curl_easy_setopt(handler, CURLOPT_ACCEPT_ENCODING, "gzip,deflate");
+
+    http_property =
+        axis2_msg_ctx_get_property (msg_ctx,
+                                    env, AXIS2_TRANSPORT_HEADER_PROPERTY);
+    if (http_property)
+    {
+        array_list = (axutil_array_list_t *)
+            axutil_property_get_value (http_property, env);
+        /* axis2_http_sender_add_header_list (request, env, array_list); */
+        int ii = 0;
+        int kk = 0;
+        axis2_http_header_t *http_header = NULL;
+        axis2_char_t *header_str = NULL;
+        ii = axutil_array_list_size (array_list, env);
+        for (; kk < ii; kk++) {
+            http_header = (axis2_http_header_t *) axutil_array_list_get (array_list, env, kk);
+            axis2_char_t *name = axis2_http_header_get_name(http_header, env);
+            axis2_char_t *value = axis2_http_header_get_value(http_header, env);
+            int plen = axutil_strlen(name) + axutil_strlen(value) + 1;
+            header_str = AXIS2_MALLOC (env->allocator, sizeof (axis2_char_t) * plen + 1);
+            sprintf(header_str, "%s:%s", name, value);
+
+            headers = curl_slist_append(headers, header_str);
+            AXIS2_LOG_DEBUG(env->log, AXIS2_LOG_SI, header_str);
+
+            AXIS2_FREE(env->allocator, header_str);
+            header_str = NULL;
+        }
+    }
 
     if (AXIS2_FAILURE == axis2_libcurl_set_options(handler, env, msg_ctx))
     {
@@ -1077,6 +1113,9 @@ axis2_libcurl_create(
         curl->alist = axutil_array_list_create(env, 15);
         curl->env = env;
         curl->handler = curl_easy_init();
+        if (curl->handler) {
+            curl_easy_setopt(curl->handler, CURLOPT_ACCEPT_ENCODING, "");
+        }
         curl->cookies = AXIS2_FALSE;
         if ((!curl->alist) || (!curl->handler))
         {
